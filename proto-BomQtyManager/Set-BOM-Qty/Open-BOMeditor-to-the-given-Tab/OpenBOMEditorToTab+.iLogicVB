@@ -1,0 +1,125 @@
+﻿Option Explicit On
+AddReference "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\UIAutomationClient.dll"
+AddReference "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\UIAutomationTypes.dll"
+
+Imports System.Windows.Forms
+Imports System.Runtime.InteropServices
+Imports System.Windows.Automation
+
+
+Sub Main()
+	If ThisDoc.Document.DocumentType <> DocumentTypeEnum.kAssemblyDocumentObject Then logger.info("DocTypeMismatchERROR") : Exit sub
+    Dim oDoc As AssemblyDocument
+    oDoc = ThisApplication.ActiveDocument
+	
+
+    ' Set a reference to the BOM
+    Dim oBOM As BOM
+    oBOM = oDoc.ComponentDefinition.BOM    
+	
+    ' Make sure the BOMview is enabled.
+    'oBOM.StructuredViewEnabled = True	
+	'OpenBOMEditor("Structured")
+
+    ' Make sure the BOMview is enabled.
+    oBOM.PartsOnlyViewEnabled = True	
+	OpenBOMEditor("Parts Only")
+	
+	logger.info("DONE")
+End Sub
+
+
+Private Delegate Function EnumWindowsProc(ByVal hWnd As IntPtr, ByVal lParam As IntPtr) As Boolean
+
+<DllImport("user32.dll", SetLastError :=True, CharSet :=CharSet.Auto) > _
+Private Shared Function SetForegroundWindow(hWnd As IntPtr) As Integer
+End Function
+<DllImport("user32.dll", SetLastError :=True) > _
+Private Shared Function SetActiveWindow(ByVal hWnd As IntPtr) As IntPtr
+End Function
+
+<DllImport("user32.dll", SetLastError :=True, CharSet :=CharSet.Auto) > _
+Private Shared Function EnumWindows(
+	ByVal lpEnumFunc As EnumWindowsProc, _
+	ByVal lParam As IntPtr) As Boolean
+End Function
+<DllImport("user32.dll", CharSet :=CharSet.Auto) > _
+Private Shared Function EnumChildWindows(ByVal hWndParent As System.IntPtr, ByVal lpEnumFunc As EnumWindowsProc, ByVal lParam As Integer) As Boolean
+End Function
+<DllImport("user32.dll", CharSet :=CharSet.Auto) > _
+Private Shared Function GetWindowText(ByVal hwnd As Integer, ByVal lpString As System.Text.StringBuilder, ByVal cch As Integer) As Integer
+End Function
+<DllImport("user32.dll", SetLastError :=True, CharSet :=CharSet.Auto) > _
+Private Shared Function GetWindowTextLength(ByVal hwnd As IntPtr) As Integer
+End Function
+
+' see https://stackoverflow.com/questions/1363167/how-can-i-get-the-child-windows-of-a-window-given-its-hwnd
+
+Private _tabNameWanted As String
+
+Sub OpenBOMEditor(tabName As String, Optional sleepTime As Integer = 0)
+	_tabNameWanted = tabName
+
+	Dim oCommandMgr As CommandManager
+	oCommandMgr = ThisApplication.CommandManager
+	Dim oControlDef = oCommandMgr.ControlDefinitions.Item("AssemblyBillOfMaterialsCmd")
+	Call oControlDef.Execute2(False)
+	ThisApplication.UserInterfaceManager.DoEvents()
+	ThisApplication.UserInterfaceManager.DoEvents()
+
+	System.Threading.Thread.Sleep(sleepTime)
+	'EnumChildWindows(ThisApplication.MainFrameHWND, AddressOf FindBOMEditor, 0)
+	EnumWindows(AddressOf FindBOMEditor, 0)
+
+	ThisApplication.UserInterfaceManager.DoEvents()
+End Sub
+
+Function FindBOMEditor(hWnd As IntPtr, lParam As IntPtr) As Boolean
+	Dim title = GetText(hWnd)
+	If title IsNot Nothing AndAlso title.StartsWith("Bill of Materials") Then
+		'Logger.Debug("Bill of Materials window: {0}", hWnd)
+		EnumChildWindows(hWnd, AddressOf FindPane1, 0)
+		Return False ' we're done
+	End If
+
+	Return True ' keep enumerating the child windows.
+End Function
+
+Function FindPane1(hWnd As IntPtr, lParam As IntPtr) As Boolean
+	Dim element = AutomationElement.FromHandle(hWnd)
+	If element.Current.AutomationId = "panel1" Then
+		'Logger.Debug("found panel1")
+		SetActiveWindow(hWnd)
+		Dim tabControl = element.FindFirst(TreeScope.Descendants, New PropertyCondition(AutomationElement.AutomationIdProperty, "tabControl1"))
+		If tabControl IsNot Nothing Then
+			'Logger.Debug("Found tab control")
+			tabControl.SetFocus()
+
+			Dim tabPage = tabControl.FindFirst(TreeScope.Descendants, New PropertyCondition(AutomationElement.NameProperty, _tabNameWanted))
+			If tabPage IsNot Nothing Then
+				'Logger.Debug("Found tab page")
+				Dim tabPageSelector As SelectionItemPattern = tabPage.GetCurrentPattern(SelectionItemPattern.Pattern)
+				tabPageSelector.Select()
+			End If
+		End If
+
+		Return False ' we're done
+	End If
+	Return True ' contine to next window
+End Function
+
+' https://www.pinvoke.net/default.aspx/user32.getwindowtext
+Public Function GetText(ByVal hWnd As IntPtr) As String
+	Dim length As Integer
+	If hWnd.ToInt32 = 0 Then
+		Return Nothing
+	End If
+	length = GetWindowTextLength(hWnd)
+	If length = 0 Then
+		Return Nothing
+	End If
+	Dim sb As New System.Text.StringBuilder("", length)
+
+	GetWindowText(hWnd, sb, sb.Capacity + 1)
+	Return sb.ToString()
+End Function

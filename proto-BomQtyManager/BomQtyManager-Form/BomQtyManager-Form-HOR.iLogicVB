@@ -1,0 +1,335 @@
+Option Explicit On
+
+AddReference "System.Drawing" ' Font/Point etc
+
+Imports System.Drawing
+Imports System.Windows.Forms
+
+' Dim oInv = ThisApplication
+Dim thisAppName = "BomQtyManager"
+
+Dim locPoint As New Drawing.Point(10, 25) ' !!
+
+' ===== Qty-Prop Panel =====
+
+Dim qtyPropLbl As New Label
+With qtyPropLbl
+	.Dock = DockStyle.Fill
+	.Font = New Font("Calibri", 11) 
+	.Font = New Drawing.Font(.Font, FontStyle.Bold)
+	.Text = "Настройки 3D-модели:"
+End With
+
+Dim qtyPropFLP As New FlowLayoutPanel
+
+Dim oRB0 As New RadioButton
+With oRB0
+	.AutoSize = True
+	.Checked = True
+	.Text = "<нет> (шт.)"
+End With
+
+Dim oRB1 As New RadioButton
+With oRB1
+	.AutoSize = True
+	.Text = "Длина (мм)"
+End With
+
+Dim oRB2 As New RadioButton
+With oRB2
+	.AutoSize = True
+	.Text = "Площадь (м^2)"
+End With
+
+Dim oRB3 As New RadioButton
+With oRB3
+	.AutoSize = True
+	.Text = "Объем (м^3)"
+End With
+
+Dim oRB4 As New RadioButton
+With oRB4
+	.AutoSize = True
+	.Text = "Масса (кг)"
+End With
+
+Dim qtyOptsFLP As New FlowLayoutPanel
+With qtyOptsFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	.Dock = DockStyle.Fill
+	.FlowDirection = FlowDirection.TopDown
+	.Location = locPoint
+	.MinimumSize = New Size(215, 30) ' !!
+
+	.Controls.Add(oRB0)
+	.Controls.Add(oRB1)
+	.Controls.Add(oRB2)
+	.Controls.Add(oRB3)
+	.Controls.Add(oRB4)
+End With
+
+Dim qtyOptsGB As New GroupBox
+With qtyOptsGB
+	.AutoSize = True
+	.Text = "Cвойство-Количество"
+
+	.Controls.Add(qtyOptsFLP)
+End With
+
+With qtyPropFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	.Dock = DockStyle.Fill
+	.FlowDirection = FlowDirection.TopDown
+
+	.Controls.Add(qtyPropLbl)
+	.Controls.Add(qtyOptsGB)
+End With
+
+
+' ===== Area Settings Panel =====
+
+Dim areaSetsFLP As New FlowLayoutPanel
+
+Dim areaSetsLbl As New Label
+With areaSetsLbl
+	.Dock = DockStyle.Fill
+	.Font = New Font("Calibri", 11) 
+	.Font = New Drawing.Font(.Font, FontStyle.Bold)
+	.Text = "Настройки приложения:"
+End With
+
+Dim oRB21 As New RadioButton
+With oRB21
+	.AutoSize = True
+	.Checked = True
+	' .Text = "Наибольшая грань" & vbLf & "(детали с плоской топологией)"
+	.Text = "Наибольшая грань (детали с плоской топологией)"
+End With
+
+Dim oRB22 As New RadioButton
+With oRB22
+	.AutoSize = True
+	' .Text = "Развертка" & vbLf & "(объект среды 'листовой металл')"
+	.Text = "Развертка (объект среды 'листовой металл')"
+End With
+
+Dim areaSourceOptsFLP As New FlowLayoutPanel
+With areaSourceOptsFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	.Dock = DockStyle.Fill
+	.FlowDirection = FlowDirection.TopDown
+	.Location = locPoint
+
+	.Controls.Add(oRB21)
+	.Controls.Add(oRB22)
+End With
+
+Dim areaSourceGB As New GroupBox
+With areaSourceGB
+	.AutoSize = True
+	.Dock = DockStyle.Fill
+	.Text = "Площадь (источник значения)"
+
+	.Controls.Add(areaSourceOptsFLP)
+End With
+
+Dim oRB23 As New RadioButton
+With oRB23
+	.AutoSize = True
+	.Checked = True
+	' .Text = "Фактическое значение площади" & vbLf & "соответствующей грани"
+	.Text = "Фактическое значение площади соответствующей грани"
+End With
+
+Dim oRB24 As New RadioButton
+With oRB24
+	.AutoSize = True
+	' .Text = "Произведение габаритных" & vbLf & "длины и ширины"
+	.Text = "Произведение габаритных длины и ширины"
+End With
+
+Dim areaMethodOptsFLP As New FlowLayoutPanel
+With areaMethodOptsFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	.Dock = DockStyle.Fill
+	.FlowDirection = FlowDirection.TopDown
+	.Location = locPoint
+
+	.Controls.Add(oRB23)
+	.Controls.Add(oRB24)
+End With
+
+Dim areaMethodGB As New GroupBox
+With areaMethodGB
+	.AutoSize = True
+	.Dock = DockStyle.Fill
+	.Text = "Площадь (метод получения)"
+
+	.Controls.Add(areaMethodOptsFLP)
+End With
+
+With areaSetsFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	.Dock = DockStyle.Fill	
+	.FlowDirection = FlowDirection.TopDown
+
+	.Controls.Add(areaSetsLbl)
+	.Controls.Add(areaSourceGB)
+	.Controls.Add(areaMethodGB)
+End With
+
+
+' ===== Top Panel =====
+
+Dim topFLP As New FlowLayoutPanel
+With topFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	' .Dock = DockStyle.Fill
+	.FlowDirection = FlowDirection.LeftToRight'TopDown
+
+	.Controls.Add(qtyPropFLP)
+	.Controls.Add(areaSetsFLP)
+End With
+
+
+' ===== Bottom Panel =====
+
+' Dim columnWidth = 120' topFLP.Width/3
+Dim buttonSize As New Size(220, 30) ' !!
+
+Dim valInitLbl As New Label
+With valInitLbl
+	.AutoSize = True
+	.Dock = DockStyle.Fill
+	.Font = New Font("Calibri", 11) 
+	.Font = New Drawing.Font(.Font, FontStyle.Bold)
+	.Text = "Исходное значение:"
+	' .Width = columnWidth
+End With
+
+Dim valInitTxtB As New TextBox
+With valInitTxtB
+	.AutoSize = True
+	.BorderStyle = BorderStyle.FixedSingle
+	.Dock = DockStyle.Fill
+	.MinimumSize = buttonSize
+	.ReadOnly = True
+	.Text = "1 шт."	
+End With
+
+Dim valInitFLP As New FlowLayoutPanel
+With valInitFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	' .Dock = DockStyle.Bottom
+	.FlowDirection = FlowDirection.TopDown
+
+	.Controls.Add(valInitLbl)
+	.Controls.Add(valInitTxtB)
+End With
+
+
+Dim valNewLbl As New Label
+With valNewLbl
+	.AutoSize = True
+	.Dock = DockStyle.Fill
+	.Font = New Font("Calibri", 11) 
+	.Font = New Drawing.Font(.Font, FontStyle.Bold)
+	.Text = "Новое значение:"
+	' .MinimumWidth = columnWidth
+End With
+
+Dim valNewTxtB As New TextBox
+With valNewTxtB
+	.AutoSize = True
+	.BorderStyle = BorderStyle.FixedSingle
+	.Dock = DockStyle.Fill
+	.MinimumSize = buttonSize
+	.ReadOnly = True
+	.Text = "1 шт."
+End With
+
+Dim valNewFLP As New FlowLayoutPanel
+With valNewFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	' .Dock = DockStyle.Bottom
+	.FlowDirection = FlowDirection.TopDown
+
+	.Controls.Add(valNewLbl)
+	.Controls.Add(valNewTxtB)
+End With
+
+
+Dim saveButton As New Button
+With saveButton
+	' .AutoSize = True
+	.Dock = DockStyle.Bottom
+	' .Dock = DockStyle.Right
+	' .Dock = DockStyle.Fill
+	.Enabled = False
+	' .Margin = New Padding(25, 0, 25, 0) ' !!
+	.MinimumSize = buttonSize
+	.Text = "&Сохранить"	
+End With
+
+Dim bottomTLP As New TableLayoutPanel
+With bottomTLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	.ColumnCount = 3
+	.Dock = DockStyle.Fill
+	' .FlowDirection = FlowDirection.LeftToRight'TopDown
+
+	.Controls.Add(valInitFLP)
+	.Controls.Add(valNewFLP)
+	.Controls.Add(saveButton)
+End With
+
+
+' ===== Main Panel =====
+
+Dim mainFLP As New FlowLayoutPanel
+With mainFLP
+	.AutoSize = True
+	' .BorderStyle = BorderStyle.FixedSingle
+	' .Dock = DockStyle.Fill
+	.FlowDirection = FlowDirection.TopDown
+
+	.Controls.Add(topFLP)
+	.Controls.Add(bottomTLP)
+End With
+
+
+''' Windows Display Scaling Factor
+' Dim winMetricsKey As Microsoft.Win32.RegistryKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("Control Panel\Desktop\WindowMetrics")
+' Dim userDPI As String = winMetricsKey.GetValue("AppliedDPI").ToString()
+' Dim displayScaleFactor As Integer = Math.Round(userDPI * 100/96)
+
+
+Dim oDialog As New Form
+With oDialog
+	.AutoSize = True
+	' .Height = SystemInformation.CaptionHeight + mainFLP.Height + Math.Round(displayScaleFactor/10) + 4 ' *configDGV.Margin.Vertical
+	' .Width = mainFLP.Width + Math.Round(displayScaleFactor/10) + 4 ' *configDGV.Parent.Margin.Horizontal
+
+	.Font = New Font("Calibri", 10) ' ("Tahoma", 11)
+	.FormBorderStyle = FormBorderStyle.FixedDialog
+	.HelpButton = True ' ??? Handle Click ???
+	' .Location = New Drawing.Point(5, 5) ' ??
+	.MaximizeBox = False
+	.MinimizeBox = False
+	' .Margin = New Padding(10) ' ??
+	' .Padding = New Padding(10) ' ??
+	.Text = thisAppName' & If(g_sLangCode = "ru-RU", " - Конфигурация", " - Configuration")
+
+	.Controls.Add(mainFLP)
+End With
+
+oDialog.ShowDialog()'New WindowWrapper(oInvApp.MainFrameHWND))

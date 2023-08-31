@@ -1,0 +1,16 @@
+<Addin Type="Standard">
+  <!--Created for Autodesk Inventor Version 25.0 (2021)-->
+  <ClassId>{6EBA9457-2AAF-4C87-849D-1778587B4A9D}</ClassId>
+  <ClientId>{6EBA9457-2AAF-4C87-849D-1778587B4A9D}</ClientId>
+  <DisplayName>BomQtyManager</DisplayName>
+  <Description Language="1033">Extends possibilities for 3Dmodel's Base Quantity customization.</Description>
+  <Description Language="1049">Расширяет возможности настройки размерности (количества) 3Dмодели.</Description>
+  <Assembly>BomQtyManager.dll</Assembly>
+  <!--<AssemblyVersion>0.1.*</AssemblyVersion>-->
+  <LoadOnStartUp>1</LoadOnStartUp>
+  <UserUnloadable>1</UserUnloadable>
+  <Hidden>0</Hidden>
+  <SupportedSoftwareVersionGreaterThan>24..</SupportedSoftwareVersionGreaterThan>
+  <DataVersion>0.1.*</DataVersion>
+  <UserInterfaceVersion>1</UserInterfaceVersion>
+</Addin>

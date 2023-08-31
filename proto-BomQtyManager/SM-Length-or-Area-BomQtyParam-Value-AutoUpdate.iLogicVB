@@ -1,0 +1,48 @@
+' Предварительное условие:
+' в 3D-модели листовой детали должна быть задана 'единичная величина' измеряемая в единицах длины/площади*.
+' * Для задания единиц площади необходимо использовать соответствующий трюк - https://forums.autodesk.com/t5/inventor-forum/custom-or-unitless-units/m-p/9509817#M788832)
+
+Option Explicit On
+
+Imports System.Text.RegularExpressions
+
+Dim oPartDoc As PartDocument = ThisDoc.Document
+If oPartDoc.SubType <> "{9C464203-9BAE-11D3-8BAD-0060B0CE6BB4}" Then RETURN
+
+Dim oPCD = oPartDoc.ComponentDefinition
+Dim oBomQty = oPCD.BOMQuantity
+Dim oBaseUnits = oBomQty.BaseUnits' : Logger.Info("oBaseUnits: " & oBaseUnits)
+
+Dim MeterBasedRusUnitRGX As New Regex ("^м(\^(?<sDegree>[2|3]))*$")
+Dim UnitDegree = 1
+
+Dim m As Match = MeterBasedRusUnitRGX.Match(oBaseUnits)
+
+If m.Success Then
+	' logger.info("sDegree: " & m.Groups("sDegree").Value)
+
+	oPartDoc.Rebuild()
+
+	If m.Groups("sDegree").Length > 0 Then UnitDegree = m.Groups("sDegree").Value
+	' logger.info("UnitDegree: " & UnitDegree)
+
+	Try
+		Parameter("SM_Width") = SheetMetal.FlatExtentsWidth' : Logger.info("SheetMetal.FlatExtentsWidth: " & SheetMetal.FlatExtentsWidth)
+		Parameter("SM_Length") = SheetMetal.FlatExtentsLength
+		' Parameter("SM_Area") = SheetMetal.FlatExtentsArea
+
+	Catch ex As Exception
+		logger.info("EXCEPTION: " & ex.Message)
+
+	End Try
+
+    Dim BomQtyType As BOMQuantityTypeEnum
+    Dim oQtySourceObj As Object
+
+    oBomQty.GetBaseQuantity(BomQtyType, oQtySourceObj)
+
+	Dim oBomQtyParam As Parameter
+	If BomQtyType = BOMQuantityTypeEnum.kParameterBOMQuantity Then oBomQtyParam = oQtySourceObj
+	' Logger.Info("UnitQuantity: " & oBomQty.UnitQuantity)
+	Logger.Info("Current BOM Qty param (" & oBomQtyParam.Name & ") value: " & oBomQtyParam.Value/100^UnitDegree) ' cm-to-m
+End If

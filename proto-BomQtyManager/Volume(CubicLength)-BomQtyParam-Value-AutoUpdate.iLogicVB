@@ -1,0 +1,53 @@
+' Предварительное условие:
+' в 3D-модели (?детали?) должна быть задана размерность ('Структурная единица') "м^3" *.
+
+' * В случае если параметры с необходимой размерностью недоступны в выпадающем списке 'Основная величина' необходимо воспользоваться трюком с подменой единиц и значения соответствующего параметра (https://forums.autodesk.com/t5/inventor-forum/custom-or-unitless-units/m-p/9509817#M788832)
+
+Option Explicit On
+
+Imports System.Text.RegularExpressions
+' Dim CubicMeterRusUnitRGX As New Regex ("^м\^3$")
+Dim CubicUnitRGX As New Regex ("^(?<BaseUnit>.+)\^3$")
+
+Dim oMDoc = ThisDoc.Document ' As PartDocument
+Dim oCmpDef = oMDoc.ComponentDefinition
+Dim oBomQty = oCmpDef.BOMQuantity
+Dim oBaseUnits = oBomQty.BaseUnits : Logger.Info("Base Units: " & oBaseUnits)
+
+If oBaseUnits is Nothing Then logger.info("RETURN#1") : RETURN
+
+' Dim m As Match = CubicMeterRusUnitRGX.Match(oBaseUnits)
+Dim m As Match = CubicUnitRGX.Match(oBaseUnits)
+
+If Not (m.Success OR ThisApplication.UnitsOfMeasure.GetTypeFromString(m.Groups("BaseUnit").Value).ToString.EndsWith("LengthUnits")) Then logger.info("RETURN#2") : RETURN
+
+' oMDoc.Rebuild()
+
+Logger.Info("Input BOM Qty value: " & oBomQty.UnitQuantity)
+
+Dim BomQtyType As BOMQuantityTypeEnum
+Dim oBomQtyObject As Object
+
+oBomQty.GetBaseQuantity(BomQtyType, oBomQtyObject)
+
+' If BomQtyType = BOMQuantityTypeEnum.kParameterBOMQuantity Then ' ???
+
+Dim oBomQtyParam As Parameter = oBomQtyObject
+
+' logger.info("oBomQtyParam.Units: " & oBomQtyParam.Units)
+
+Dim oBomQtyParamUnitType As UnitsTypeEnum
+' oBomQtyParamUnitType = ThisApplication.UnitsOfMeasure.GetTypeFromString("m")'^3")'м")'oBomQtyParam.Units)
+' logger.info("oBomQtyParamUnitType: " & oBomQtyParamUnitType.ToString)
+
+Dim Multiplier = 10^3' ?? should be /100^3 cm^3-to-m^3
+
+Parameter(oBomQtyParam.Name) = oCmpDef.MassProperties.Volume * Multiplier
+' Parameter(oBomQtyParam.Name) = oCmpDef.SurfaceBodies(1).Volume(0.01)*10^3' cm-to-mm
+Logger.Info("Output BOM Qty value (" & oBomQtyParam.Name & "): " & oBomQtyParam.Value / Multiplier / Multiplier)
+
+' End If
+
+' Logger.Info("Current BOM Qty param (" & oBomQtyParam.Name & ") value, mm^3: " & oBomQtyParam.Value*1000^3) ' m-to-mm 15
+' Logger.Info("Current BOM Qty param (" & oBomQtyParam.Name & ") value, cm^3: " & oBomQtyParam.Value*100^3) ' m-to-cm 0,015
+' Logger.Info("Current BOM Qty param (" & oBomQtyParam.Name & ") value, m^3: " & oBomQtyParam.Value)' 0,000000015

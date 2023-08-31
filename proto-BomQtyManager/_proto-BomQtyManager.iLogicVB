@@ -1,0 +1,383 @@
+' To-Do-List:
+' - Реализовать интерфейс: 
+' 	+ выбора/назначения параметра-источника кол-ва (с трюковой подменой единиц и значения для м^2)
+'	+ управления значением флага типа площади
+' + Определять листовую топологию и площадь лицевой грани для не-SM
+' - при невозможности актуализации значения в соотв. с заданными настройками
+'	- Заблокировать кнопку Сохранить
+'	- Вывести предупреждение и сбросить в "шт."
+
+
+' ??? ПРЕДВАРИТЕЛЬНОЕ УСЛОВИЕ:
+' В настройках 3D-модели стандартная "штучная" размерность ('Структурная единица') должна быть заменена на "м^2"* либо "м^3".
+
+' * В случае, если параметры соответствующей размерности (например "м^2") недоступны через выпадающий список 'Основная величина' необходимо воспользоваться трюком с временной подменой единиц и значения соответствующего параметра (https://forums.autodesk.com/t5/inventor-forum/custom-or-unitless-units/m-p/9509817#M788832)
+
+
+Option Explicit On
+
+Class BomQtyChange
+
+	Dim thisAppName = "BomQtyManager"
+	Dim myParamName = thisAppName
+	Dim myParamNote = "!!! НЕ ДЛЯ РУЧНОГО РЕДАКТИРОВАНИЯ !!!"
+	Dim bUseFlatPatternData, bUseActualValue, LenConvFactor, myParam, oBomQty, oCmpDef, oInv, oParams, oMDoc, oSB1, oUOM
+
+Sub Main
+
+oInv = ThisApplication
+oMDoc = ThisDoc.Document ' As PartDocument
+
+If Not PreCheck is Nothing Then MessageBox.Show(PreCheck, thisAppName, 0, MessageBoxIcon.Error) : RETURN
+
+oUOM = oMDoc.UnitsOfMeasure
+oParams = oCmpDef.Parameters
+Dim prcn As Integer = oParams.LinearDimensionPrecision
+oBomQty = oCmpDef.BOMQuantity
+Dim sLangCode = oInv.LanguageCode
+
+logger.info("Кол-во ДО: " & oBomQty.UnitQuantity)' & oBomQty.BaseUnits)
+
+Try
+	myParam = oParams(myParamName)
+Catch ex As Exception
+	' logger.info(ex.Message)
+End try
+
+logger.info("myParam exists: " & If(Not myParam Is Nothing, "+", "-"))
+
+
+Dim abbrEach = If(sLangCode = "ru-RU", "шт.", "Each")' : logger.info("abbrEach: " & abbrEach)
+Dim abbrLength = oUOM.GetStringFromValue(1, UnitsTypeEnum.kDefaultDisplayLengthUnits).Split(" ")(1)' : logger.info("abbrLength: " & abbrLength)
+Dim abbrArea = abbrLength & "^2" ' : logger.info("abbrArea: " & abbrArea)
+Dim abbrVolume = abbrLength & "^3" ' : logger.info("abbrVolume: " & abbrVolume)
+Dim abbrMass = oUOM.GetStringFromValue(1, UnitsTypeEnum.kDefaultDisplayMassUnits).Split(" ")(1)' : logger.info("abbrMass: " & abbrMass)
+
+
+Dim ModesDIC As New Dictionary (Of String, Integer)
+ModesDIC.Add("<нет> (" & abbrEach &")", 0)
+
+oSB1 = oCmpDef.SurfaceBodies(1)
+' Dim LenValue As String = oUOM.ConvertUnits(ExtDimsSorted(oSB1)(2), kDataBaseLengthUnits, kDefaultDisplayLengthUnits) & " " & abbrLength
+LenConvFactor = oUOM.ConvertUnits(1, kDataBaseLengthUnits, kDefaultDisplayLengthUnits)' : logger.info("LenConvFactor: " & LenConvFactor)
+Dim LenValue As String = ExtDimsSorted(oSB1)(2) * LenConvFactor & " " & abbrLength
+
+ModesDIC.Add("Длина (" & LenValue &")", 1)' & abbrLength
+
+
+bUseFlatPatternData = true
+' Dim UseFlatPatternData_DR = MessageBox.Show(String.Format("Использовать данные развертки (только для 3D-моделей, созданных в среде 'листовой металл')?{0}{0}Примечание:{0}В случае отказа будут использованы данные наибольшей грани (при условии что 3D-модель имеет плоскую топологию).", vbLf), thisAppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) ' !!
+' Dim bUseFlatPatternData = If(UseFlatPatternData_DR = vbYes, True, False)
+
+' Dim UseFlatPatternData_DR = MessageBox.Show(String.Format("Использовать данные наибольшей плоской грани?{0}(применимо для плоских 3D-моделей без изгибов){0}{0}Примечание:{0}В случае отказа будут использованы данные развертки{0}(для 3D-моделей, созданных в среде 'листовой металл').", vbLf), thisAppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button1) ' !!
+' Dim bUseFlatPatternData = If(UseFlatPatternData_DR = vbYes, False, True)' : logger.info("bUseFlatPatternData: " & bUseFlatPatternData)
+
+
+bUseActualValue = true
+' Dim UseActualValue_DR = MessageBox.Show(String.Format("Использовать фактическое значение площади?{0}{0}Примечание:{0}В случае отказа будет использовано расчетное значение (произведение габаритных длины и ширины).", vbLf), thisAppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button1) ' !!
+' bUseActualValue = If(UseActualValue_DR = vbYes, True, False)' : logger.info("bUseActualValue: " & bUseActualValue)
+
+Dim AreaValue As Double = 0
+
+Try
+	AreaValue = GetAreaValue
+Catch ex As Exception
+	logger.info("ERROR: " & ex.Message)
+End Try
+
+If AreaValue > 0 Then ModesDIC.Add("Площадь (" & Math.Round(AreaValue, prcn) & " " & abbrArea & ")", 2) ' !!! Non-selectable if Non-Flat
+
+
+' Dim VlmConvFactor = (oUOM.ConvertUnits(1, kCentimeterLengthUnits, kDefaultDisplayLengthUnits))^3
+Dim VlmConvFactor = LenConvFactor^3
+Dim VlmValue = oCmpDef.MassProperties.Volume * VlmConvFactor
+ModesDIC.Add("Объем (" & Math.Round(VlmValue, prcn) & " " & abbrVolume & ")", 3)
+
+
+Dim MassValue = oUOM.ConvertUnits(oCmpDef.MassProperties.Mass, kDatabaseMassUnits, kDefaultDisplayMassUnits)
+ModesDIC.Add("Масса (" & Math.Round(MassValue, prcn) & " " & abbrMass & ")", 4)
+
+
+Dim sUserKey = InputListBox("Выберите свойство", ModesDIC.Keys, ModesDIC.Keys(1), thisAppName, "Свойство, определяющее кол-во компонента", , 270)
+
+Dim UserMode = ModesDIC(sUserKey)' : logger.info("UserMode: " & UserMode)
+
+If UserMode = 0
+	If Not myParam Is Nothing Then
+		If oParams(myParamName).Dependents.Count > 0 Then
+			MessageBox.Show("Невозможно удалить польз. параметр '" & myParamName & "' т.к. на него ссылается другой параметр.", thisAppName, 0, MessageBoxIcon.Error)
+
+		Else
+			' logger.info("oUPS.Count#1: " & oUPS.Count)
+			oParams(myParamName).Delete
+			' logger.info("oUPS.Count#2: " & oUPS.Count)
+			Call oBomQty.SetBaseQuantity(BOMQuantityTypeEnum.kEachBOMQuantity)
+			' logger.info("Настройки количества приведены в стандартное состояние (расход в 'шт.').")
+		End If
+	End If
+	logger.info("RETURN#7") : RETURN
+End If
+
+
+If myParam Is Nothing Then
+	myParam = oParams.UserParameters.AddByExpression(myParamName, 1, kDefaultDisplayLengthUnits)
+	' myParam = oUPs.AddByExpression(myParamName, 1, kMeterLengthUnits)
+
+Else
+	myParam.Units = kDefaultDisplayLengthUnits
+	' myParam.Units = kMeterLengthUnits
+	myParam.Expression = "1"
+End If
+
+If myParam.Comment <> myParamNote Then myParam.Comment = myParamNote
+
+Dim oSW As New StopWatch
+
+If UserMode <> 2 ' NOT Area
+	Select Case UserMode
+
+		Case 1 ' LENGTH
+
+			' Dim LengthByParam_DR = MessageBox.Show(String.Format("Использовать один из существующих линейных размеров (параметров 3D-модели)?{0}{0}Примечание:{0}В случае отказа будет использовано значение наибольшего из габаритных размеров 3D-модели ({1}).", vbLf, LenValue), thisAppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) ' !!
+			' Dim bLengthByParam = If(LengthByParam_DR = vbYes, True, False)
+
+			' Dim LengthByMaxExtDim_DR = MessageBox.Show(String.Format("Использовать значение наибольшего из габаритных размеров 3D-модели ({1})?{0}{0}Примечание:{0}В случае отказа будет предложено выбрать один из существующих линейных размеров (параметров 3D-модели).", vbLf, LenValue), thisAppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button1) ' !!
+			' Dim bLengthByParam = If(LengthByMaxExtDim_DR = vbYes, False, True)
+
+			' myParam.Units = kDefaultDisplayLengthUnits
+
+			' If bLengthByParam
+				' Dim myLenParam = SetLenParam
+				' myParam = myLenParam
+
+			' Else
+				myParam.Expression = LenValue
+			' End If
+
+		Case 3 ' VOLUME
+			myParam.Units = abbrVolume
+			myParam.Expression = VlmValue
+
+		Case 4 ' MASS
+			myParam.Units = abbrMass
+			myParam.Expression = MassValue
+			' myParam.Value = MassValue
+
+	End Select
+
+	Call oBomQty.SetBaseQuantity(BOMQuantityTypeEnum.kParameterBOMQuantity, myParam) : oMDoc.Update ' обновление значения 'Структурная единица'
+
+Else ' AREA
+
+	myParam.Units = abbrArea
+	' myParam.Expression = "1" ' ??
+	myParam.Expression = AreaValue ' !!
+
+	oSW.Start
+
+	ForceCustomBaseUnit
+End If
+
+logger.info("Кол-во ПОСЛЕ: " & oBomQty.UnitQuantity)' & oBomQty.BaseUnits)
+
+' oSW.Stop
+logger.info(Math.Round(oSW.Elapsed.TotalSeconds, 3) & "sec.")
+
+END SUB
+
+
+Function GetAreaValue As Double ' SquareMeters
+
+	Dim AreaConvFactor = LenConvFactor^2' : logger.info("AreaConvFactor: " & AreaConvFactor)
+
+	If Not bUseFlatPatternData And FlatBodyMainFaces(oSB1) Is Nothing Then
+		logger.info("Топология детали не является плоской.", thisAppName, 0, MessageBoxIcon.Error)
+		RETURN 0
+
+	Else If bUseActualValue
+
+		If Not bUseFlatPatternData Then
+			Return FlatBodyMainFaces(oSB1)(1).Evaluator.Area * AreaConvFactor
+
+		Else If oMDoc.SubType ="{9C464203-9BAE-11D3-8BAD-0060B0CE6BB4}"
+			' Return oCmpDef.FlatPattern.TopFace.Evaluator.Area / 100^2 ' cm^2 -> m^2 ' ??
+			Return oCmpDef.FlatPattern.TopFace.Evaluator.Area * AreaConvFactor
+		End If
+
+	Else ' Calculated-Area
+
+		If Not bUseFlatPatternData ' +++
+			Return ExtDimsSorted(oSB1)(2) * ExtDimsSorted(oSB1)(1) * AreaConvFactor
+
+		Else If oMDoc.SubType ="{9C464203-9BAE-11D3-8BAD-0060B0CE6BB4}"
+
+			Dim LinConvFactor = oUOM.ConvertUnits(1, kDefaultDisplayLengthUnits, kMeterLengthUnits) ' ??
+			' Return SheetMetal.FlatExtentsArea * LinConvFactor^2 ' ?^2 -> m^2
+			Return SheetMetal.FlatExtentsArea * LinConvFactor^2 ' ?^2 -> m^2
+		End If
+	End If
+End Function
+
+
+''' Trick to Set (inherit from BOM Qty) custom Base Unit  
+Sub ForceCustomBaseUnit
+
+	Dim paramExprBackup = myParam.Expression' : logger.info("paramExprBackup: " & paramExprBackup)
+	Dim paramUnitsBackup = myParam.Units
+
+	myParam.Units = UnitsTypeEnum.kMeterLengthUnits
+	myParam.Expression = "1"
+
+	Call oBomQty.SetBaseQuantity(BOMQuantityTypeEnum.kParameterBOMQuantity, myParam)
+
+	myParam.Units = paramUnitsBackup
+	myParam.Expression = paramExprBackup' : logger.info("myParam.Expression: " & myParam.Expression)
+
+	oMDoc.Update
+
+	Dim sAutoItTrickPath = "C:\_Freelance\My-AI-AddIns\BomQtyManager\proto-BomQtyManager\SetCustomBaseUnit_UI-trick.au3"
+	Process.Start(sAutoItTrickPath)
+
+	oInv.CommandManager.ControlDefinitions("AppDocumentSettingsCmd").Execute2(False)'True)
+End Sub
+
+
+Function ExtDimsSorted(oSB As SurfaceBody) As List(Of Double)
+	Dim oOMRB = oSB.OrientedMinimumRangeBox ' Introduced in Inventor 2021
+
+	Dim ExtDim1 As Double = oOMRB.DirectionOne.Length ' : logger.info("ExtDim1 = " & ExtDim1)
+	Dim ExtDim2 As Double = oOMRB.DirectionTwo.Length ' : logger.info("ExtDim2 = " & ExtDim2)
+	Dim ExtDim3 As Double = oOMRB.DirectionThree.Length ' : logger.info("ExtDim3 = " & ExtDim3)
+
+	Dim ExtDims As New List(Of Double) From {ExtDim1, ExtDim2, ExtDim3}
+
+	ExtDims.Sort()
+
+	Return ExtDims
+End Function
+
+
+''' Get two "main" (largest) faces of the flat body (if applicable)
+Function FlatBodyMainFaces(oSB As SurfaceBody) As ObjectCollection
+	Dim oTG = ThisApplication.TransientGeometry
+	Dim oTOs = ThisApplication.TransientObjects
+	Dim oPoint As Point = oSB.OrientedMinimumRangeBox.CornerPoint ' Introduced in Inventor 2021
+	Dim oFace1 As Face = oSB.Faces(1) ' 1-st ("front") main body face
+
+	For Each oFace As Face In oSB.Faces
+		' If TypeOf oFace.Geometry IsNot Plane Then Continue For
+		If Not TypeOf oFace.Geometry Is Plane Then Continue For
+		If Math.Abs(oFace.Geometry.DistanceTo(oPoint)) > 0.0001 Then Continue For ' up to 5-times faster
+		If oFace.Evaluator.Area > oFace1.Evaluator.Area Then oFace1 = oFace
+	Next
+
+	' If TypeOf oFace1.Geometry IsNot Plane Then
+	If Not TypeOf oFace1.Geometry Is Plane Then
+		' logger.info(oSB.Name & " largest face is not not flat.")
+		Return Nothing
+	End If
+
+	Dim origin As Point = oFace1.PointOnFace
+
+	Dim pt(2) As Double
+	pt(0) = origin.X : pt(1) = origin.Y : pt(2) = origin.Z
+
+	' Get the normal of the face and create a vector in the reverse direction
+	' because the face normal points out of the solid.
+	Dim n(2) As Double
+	oFace1.Evaluator.GetNormalAtPoint(pt, n)
+	Dim normal As UnitVector = oTG.CreateUnitVector(-n(0), -n(1), -n(2))
+
+	Dim oBFs As ObjectsEnumerator = Nothing ' entities (faces) intersected by a ray
+	Dim oBPts As ObjectsEnumerator = Nothing ' points of entity intersection with a ray
+
+	oSB.FindUsingRay(origin, normal, 0.00001, oBFs, oBPts, True) ' less Radius value minimizes faulties
+
+	Dim dTh As Double = 0 ' Body Thickness
+
+	If oBPts.Count = 2 Then dTh = Math.Round(oBPts(1).DistanceTo(oBPts(2)), 14)
+
+	Dim oBMFs As ObjectCollection = oTOs.CreateObjectCollection
+
+	Dim oFace2 As Face ' 2-nd ("back") main body face
+	If (TypeOf oBFs(2).Geometry Is Plane And (Math.Abs(oBFs(1).Evaluator.Area - oBFs(2).Evaluator.Area) < 0.01) And ((dTh * oBFs(1).Evaluator.Area - oSB.Volume(0.01)) < 0.01)) Then ' tolerance set is necessary when comparing doubles
+		oFace2 = oBFs(2)
+		oBMFs.Add(oFace1)
+		oBMFs.Add(oFace2)
+	Else
+		' logger.info(oSB.Name & " has non-flat topology.")
+		Return Nothing
+	End If
+
+	Return oBMFs
+End Function
+
+
+Function PreCheck As String
+
+	If oMDoc.DocumentType <> kPartDocumentObject Then Return "Работа предусмотрена только с моделями деталей."
+
+	oCmpDef = oMDoc.ComponentDefinition
+
+	If oCmpDef.BOMStructure = BOMStructureEnum.kPhantomBOMStructure Or oCmpDef.BOMStructure = BOMStructureEnum.kReferenceBOMStructure Then
+		Return "Работа с фантомными/ссылочными моделями не поддерживается."
+
+	Else If oCmpDef.IsiPartFactory OR oCmpDef.IsiPartMember Then
+		Return "Работа с параметрическими рядами 3Dмоделей не поддерживается."
+
+	Else If oCmpDef.SurfaceBodies.Count = 0 Then
+		Return "Работа с 3Dмоделями не имеющими твердого тела не поддерживается."
+
+	Else If oCmpDef.SurfaceBodies.Count > 1 Then
+		Return "Работа с МультиДеталями не поддерживается."
+
+	Else If oCmpDef.IsContentMember
+		Return "Работа с компонентами библиотеки стандартных не поддерживается."
+
+	Else If oCmpDef.AttributeSets.NameIsUsed("com.autodesk.FG")
+		Return "Работа с компонентами генератора рам не поддерживается."
+
+	' Else If
+		' Return "Работа с 'проводошными' компонентами не поддерживается."
+
+	' Else If
+		' Return "Работа с 'трубными' компонентами не поддерживается."
+
+	Else
+		Return Nothing
+
+	End If
+End Function
+
+
+' Function SetLenParam() As Parameter
+
+	' Dim oParamEntries As New ArrayList
+
+	' For Each p in oParams.ModelParameters
+		' If([Enum].GetName(GetType(UnitsTypeEnum), oUOM.GetTypeFromString(p.Units))).EndsWith("LengthUnits") Then oParamEntries.Add(p.Name & " (" & oUOM.ConvertUnits(p.Value, kDataBaseLengthUnits, oUOM.GetTypeFromString(p.Units)) & p.Units & ")")
+	' Next
+
+	' For Each p in oParams.UserParameters
+		' If([Enum].GetName(GetType(UnitsTypeEnum), oUOM.GetTypeFromString(p.Units))).EndsWith("LengthUnits") Then oParamEntries.Add(p.Name & " (" & oUOM.ConvertUnits(p.Value, kDataBaseLengthUnits, oUOM.GetTypeFromString(p.Units)) & p.Units & ")")
+	' Next
+
+	' Dim sParamEntry = InputListBox("Выберите параметр", oParamEntries, oParamEntries(0), thisAppName, "Линейные размеры/параметры:", ,270)
+
+	' Return oCmpDef.Parameters(sParamEntry.Split(" ")(0))
+' End Function
+
+
+' Sub TimedMessage(oMsg As String, oTimeout As Integer)
+
+	' Dim oForm As New Form() With { .Enabled = True }
+	' System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(oTimeout)).ContinueWith(Sub(t)
+	' oForm.Close()
+	' End Sub ,
+	' System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext())
+
+	' MessageBox.Show(oForm, String.Format(oMsg, oTimeout), "Предупреждение", 0, MessageBoxIcon.Information)
+
+' End Sub
+
+End Class
